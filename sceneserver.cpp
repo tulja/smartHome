@@ -53,7 +53,7 @@ Run g_currentRun;
 
 struct CloseApp {};
 
-const std::vector<std::string> resourceTypes{"core.light", "core.fan"};
+//const std::vector<std::string> resourceTypes{"core.light","core.fan"};
 const std::string relativetUri = OC_RSRVD_WELL_KNOWN_URI;
 
 std::mutex mtx;
@@ -64,7 +64,8 @@ std::shared_ptr<RCSRemoteResourceObject> g_discoveredResources;
 
 std::vector<RCSRemoteResourceObject::Ptr> g_foundResourceList;
 std::vector<RCSResourceObject::Ptr> g_memberResourceList;
-
+std::shared_ptr<RCSRemoteResourceObject> lightResource;
+std::shared_ptr<RCSRemoteResourceObject>  fanResource;
 SceneCollection::Ptr g_sceneColObj;
 Scene::Ptr g_scene;
 Scene::Ptr g_scene_2;
@@ -227,23 +228,56 @@ void onResourceDiscovered(std::shared_ptr<RCSRemoteResourceObject> foundResource
 
     std::string resourceURI = foundResource->getUri();
     std::string hostAddress = foundResource->getAddress();
-
+    std::cout<<"======================================================================================================================================================";
     std::cout << "\t\tResource URI : " << resourceURI << std::endl;
     std::cout << "\t\tResource Host : " << hostAddress << std::endl;
-
-    g_foundResourceList.push_back(foundResource);
-
+    std::cout<<"======================================================================================================================================================";
+   // g_foundResourceList.push_back(foundResource);
+    if( foundResource->getUri() == "/a/light")
+    	 lightResource = foundResource;
+    if( foundResource->getUri() == "/a/fan")
+    	 fanResource = foundResource;
+    		
     cond.notify_all();
 }
 
-bool discoverResource()
+bool discoverLightResource()
 {
-    std::cout << "Wait 2 seconds until discovered." << std::endl;
-
+    std::cout << "Wait 2 seconds until light is discovered." << std::endl;
+    const std::vector<std::string> resourceType1{"core.light"};
+    // const std::vector<std::string> resourceType2{"core.fan"};
     try
     {
         discoveryTask = RCSDiscoveryManager::getInstance()->discoverResourceByTypes(
-                RCSAddress::multicast(), relativetUri, resourceTypes, &onResourceDiscovered);
+                RCSAddress::multicast(), relativetUri, resourceType1, &onResourceDiscovered);
+       /* discoveryTask = RCSDiscoveryManager::getInstance()->discoverResourceByTypes(
+                RCSAddress::multicast(), relativetUri, resourceType2, &onResourceDiscovered);*/
+    }
+    catch(const RCSPlatformException& e)
+    {
+         std::cout << e.what() << std::endl;
+    }
+    catch(const RCSException& e)
+    {
+        std::cout << e.what() << std::endl;
+    }
+    std::unique_lock<std::mutex> lck(mtx);
+
+    cond.wait_for(lck, std::chrono::seconds(4));
+    return g_discoveredResources != nullptr;
+}
+
+
+bool discoverFanResource()
+{
+    std::cout << "Wait 2 seconds until fan is discovered." << std::endl;
+    const std::vector<std::string> resourceType1{"core.fan"};
+  
+    try
+    {
+        discoveryTask = RCSDiscoveryManager::getInstance()->discoverResourceByTypes(
+                RCSAddress::multicast(), relativetUri, resourceType1, &onResourceDiscovered);
+     
     }
     catch(const RCSPlatformException& e)
     {
@@ -294,11 +328,55 @@ void createSceneAction()
 {
     try
     {
-        g_scene->addNewSceneAction(g_foundResourceList.at(0), "power", "off");
-        g_scene->addNewSceneAction(g_foundResourceList.at(1), "speed", "0");
 
-        g_scene_2->addNewSceneAction(g_foundResourceList.at(0), "power", "on");
-        g_scene_2->addNewSceneAction(g_foundResourceList.at(1), "speed", "20");
+        ///Scene-1 
+        ////Light -- Power == OFF
+        ////Fan   -- Speed == 0 
+
+        ///Scene-2 
+        ////Light -- Power == ON
+        ////Fan   -- Speed == 20
+
+        /*std::cout << "============================================================================================================";
+        std::cout << g_foundResourceList.at(0)->getUri();
+        //std::cout << g_foundResourceList.at(1)->getUri();
+        std::cout << "============================================================================================================";
+
+       /* if(g_foundResourceList.at(0)->getUri() == "/a/fan")
+        {
+        	  std::cout<<"Hey it is FAN";
+        	  g_scene->addNewSceneAction(g_foundResourceList.at(0), "speed", "0");
+        	  g_scene_2->addNewSceneAction(g_foundResourceList.at(0), "speed", "20");
+        }
+       /* if(g_foundResourceList.at(1)->getUri() == "/a/fan")
+        {
+        	  std::cout<<"Hey it is FAN";
+        	  g_scene->addNewSceneAction(g_foundResourceList.at(1), "speed", "0");
+        	  g_scene_2->addNewSceneAction(g_foundResourceList.at(1), "speed", "20");
+        }*/
+        /*if(g_foundResourceList.at(0)->getUri() == "/a/light")
+        {
+             std::cout<<"Hey it is LIGHT";
+             g_scene->addNewSceneAction(g_foundResourceList.at(0), "power", "off");
+             g_scene_2->addNewSceneAction(g_foundResourceList.at(0), "power", "on");
+        }
+       /* if(g_foundResourceList.at(1)->getUri() == "/a/light")
+        {
+             std::cout<<"Hey it is LIGHT";
+             g_scene->addNewSceneAction(g_foundResourceList.at(1), "power", "off");
+             g_scene_2->addNewSceneAction(g_foundResourceList.at(1), "power", "on");
+        }*/
+
+
+        g_scene->addNewSceneAction(lightResource, "power", "off");
+        g_scene_2->addNewSceneAction(lightResource, "power", "on");
+        g_scene->addNewSceneAction(fanResource, "speed", "0");
+        g_scene_2->addNewSceneAction(fanResource, "speed", "20");
+
+
+
+
+  
     }
     catch(const RCSException& e)
     {
@@ -416,27 +494,54 @@ void runCreateSceneList()
             break;
     }
 }
-
+/*
 int main()
 {
     configurePlatform();
 
     discoverResource();
 
-    g_currentRun = createSceneList;
+    g_currentRun = runCreateSceneList;
 
+    while (true)
+    {
+        try
+        {
+            g_currentRun();
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << e.what() << std::endl;
+        }
+        catch (const CloseApp&)
+        {
+            break;
+        }
+    }
+
+    std::cout << "Stopping the client" << std::endl;
+
+    return 0;
+}
+*/
+int main()
+{
+    configurePlatform();
+
+    //discoverResource();
+    discoverLightResource();
+    discoverFanResource();
+   // g_currentRun = runCreateSceneList;
 
    //while (true)
     //{
         try
         {
-           g_currentRun();
-           g_currentRun = createSceneCollection;
-           g_currentRun();
-           g_currentRun = createScene;
-           g_currentRun();
-           g_currentRun = createSceneAction;
-           g_currentRun();
+          // g_currentRun();
+           createSceneList();
+           createSceneCollection();
+           createScene();
+           createSceneAction();
            executeScene(2);	
         }
         catch (const std::exception& e)
